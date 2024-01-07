@@ -187,9 +187,19 @@ def test_design_powergate_ringosc():
         time.sleep_ms(100)
         print(user_out[0].value(), user_out[1].value(), user_out[2].value(), user_out[3].value())
 
+def test_design_hovalaag():
+    # select design
+    enable_design("tt_um_MichaelBell_hovalaag")
+
+    import hovalaag
+    hovalaag.hello()
+    # hovalaag.test_alu()
+    # hovalaag.test_rng()
+
 if __name__ == '__main__':
     test_design_tnt_counter()
 #    test_design_loopback()
 #    test_design_vga()
 #    test_design_powergate_add()
 #    test_design_powergate_ringosc()
+#    test_design_hovalaag()
