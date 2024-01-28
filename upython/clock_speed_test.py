@@ -35,31 +35,57 @@ tt.shuttle.tt_um_test.enable()
 sm = rp2.StateMachine(0, clock_prog, freq=freq, sideset_base=machine.Pin(0))
 sm.active(1)
 
-# Run 1 clock
-print("Clock test... ", end ="")
-sm.put(1)
-sm.get()
-print(f" done. Value: {tt.output_byte}")
-
-while True:
-    last = tt.output_byte
+def run_test(freq, fast=False):
+    # Multiply requested project clock frequency by 2 to get RP2040 clock
+    freq *= 2
     
-    # Run clock for approx 1 second, sending a multiple of 256 clocks plus 1.
-    t = time.ticks_us()
-    sm.put((freq // 512) * 256)
-    sm.get()
-    t = time.ticks_us() - t
-    print(f"Clocked for {t}us: ", end = "")
+    if freq > 350_000_000:
+        raise ValueError("Too high a frequency requested")
+    
+    if freq > 266_000_000:
+        rp2.Flash().set_divisor(4)
+
+    machine.freq(freq)
+
+    try:
+        # Run 1 clock
+        print("Clock test... ", end ="")
+        sm.put(1)
+        sm.get()
+        print(f" done. Value: {tt.output_byte}")
+
+        errors = 0
+        for _ in range(10):
+            last = tt.output_byte
+            
+            # Run clock for approx 0.25 or 1 second, sending a multiple of 256 clocks plus 1.
+            clocks = (freq // 2048) * 256 if fast else (freq // 512) * 256
+            t = time.ticks_us()
+            sm.put(clocks)
+            sm.get()
+            t = time.ticks_us() - t
+            print(f"Clocked for {t}us: ", end = "")
+                
+            # Check the counter has incremented by 1.
+            if tt.output_byte != (last + 1) & 0xFF:
+                print("Error: ", end="")
+                errors += 1
+            print(tt.output_byte)
+            
+            if not fast:
+                # Sleep so the 7-seg display can be read
+                time.sleep(0.5)
+    finally:
+        if freq > 133_000_000:
+            machine.freq(133_000_000)
+            rp2.Flash().set_divisor(2)
         
-    # Check the counter has incremented by 1.
-    if tt.output_byte != last + 1:
-        print("Error: ", end="")
-    print(tt.output_byte)
-    
-    # Sleep so the 7-seg display can be read
-    time.sleep(0.5)
-    
-if freq > 133_000_000:
-    machine.freq(133_000_000)
-    rp2.Flash().set_divisor(2)
+    return errors
 
+if __name__ == "__main__":
+    freq = 100_000_000
+    while True:
+        print(f"\nRun at {freq/1000000}MHz project clock\n")
+        errors = run_test(freq, True)
+        if errors > 0: break
+        freq += 2_000_000
