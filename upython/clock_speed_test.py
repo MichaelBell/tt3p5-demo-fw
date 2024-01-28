@@ -12,6 +12,9 @@ from ttboard.demoboard import DemoBoard
 # Frequency for the RP2040, the design is clocked at half this frequency
 freq = 133_000_000
 
+if freq > 266_000_000:
+    rp2.Flash().set_divisor(4)
+
 machine.freq(freq)
 
 # PIO program to drive the clock.  Put a value n and it clocks n+1 times
@@ -55,3 +58,8 @@ while True:
     
     # Sleep so the 7-seg display can be read
     time.sleep(0.5)
+    
+if freq > 133_000_000:
+    machine.freq(133_000_000)
+    rp2.Flash().set_divisor(2)
+
