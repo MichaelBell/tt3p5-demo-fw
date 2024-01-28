@@ -40,8 +40,10 @@ sm_rx = rp2.StateMachine(1, read_prog, in_base=machine.Pin(3))
 dst_data = bytearray(8192)
 d = rp2.DMA()
 
+# Read using the SM1 RX DREQ
 c = d.pack_ctrl(inc_read=False, treq_sel=5)
 
+# Read from the SM1 RX FIFO
 d.config(
     read=0x5020_0024,
     write=dst_data,
@@ -51,13 +53,18 @@ d.config(
 )
 
 def start_rx():
+    # Reset the SM
     sm_rx.active(0)
     while sm_rx.rx_fifo() > 0: sm_rx.get()
     sm_rx.restart()
+    
+    # Wait until out0 changes from its current value
     if machine.Pin(3).value():
         sm_rx.exec("wait(0, pin, 0)")
     else:
         sm_rx.exec("wait(1, pin, 0)")
+        
+    # Re-activate SM, it will block until the wait command completes
     sm_rx.active(1)
 
 
@@ -66,22 +73,20 @@ def run_test(freq):
     # Multiply requested project clock frequency by 2 to get RP2040 clock
     freq *= 2
     
-    if freq > 350_000_000:
+    if freq > 266_000_000:
         raise ValueError("Too high a frequency requested")
     
-    if freq > 266_000_000:
-        rp2.Flash().set_divisor(4)
-
     machine.freq(freq)
 
     try:
-        # Run 1 clock
+        # Run 64 clocks
         print("Clock test... ", end ="")
         start_rx()
         sm.put(63)
         sm.get()
         print(f" done. Value now: {tt.output_byte}")
 
+        # Print the values read back for inspection
         for j in range(4):
             readings = sm_rx.get()
             for i in range(16):
@@ -95,29 +100,31 @@ def run_test(freq):
         for _ in range(10):
             last = tt.output_byte
             
+            # Setup the read SM and DMA transfer into the verification buffer
             start_rx()
             d.config(write=dst_data, trigger=True)
             
-            # Run clock for approx 1 second, sending a multiple of 256 clocks plus 1.
+            # Run clock for enough time to fill the buffer
             t = time.ticks_us()
-            #sm.put((freq // 512) * 256)
             sm.put(1024*17)
             sm.get()
             t = time.ticks_us() - t
             print(f"Clocked for {t}us: ", end = "")
             
+            # Print the first 16 values in the DMA'd buffer
             for j in range(0,4):
                 readings = dst_data[j]
                 for i in range(4):
                     val = (readings >> (i*2)) & 0x3
                     print(val, end = " ")
                     
-            # Check the counter has incremented by 1.
+            # Check the counter has incremented by 1, as we sent a
+            # multiple of 256 clocks plus one more
             if tt.output_byte != (last + 1) & 0xFF:
                 print("Error: ", end="")
             print(tt.output_byte)
             
-            # Check the counter continuously increases
+            # Check the read data from the counter continuously increases
             def verify(count, expected_val, retry):
                 errors = 0
                 
@@ -147,13 +154,11 @@ def run_test(freq):
             total_errors += errors
             if errors > 10:
                 return total_errors
-            
-            # Sleep so the 7-seg display can be read
-            #time.sleep(0.5)
-    finally:    
+
+    finally:
+        # Remove overclock
         if freq > 133_000_000:
             machine.freq(133_000_000)
-            rp2.Flash().set_divisor(2)
             
     return total_errors
 

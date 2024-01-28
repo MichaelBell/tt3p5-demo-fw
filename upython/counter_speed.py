@@ -9,14 +9,6 @@ import time
 from ttboard.mode import RPMode
 from ttboard.demoboard import DemoBoard
 
-# Frequency for the RP2040, the design is clocked at half this frequency
-freq = 133_000_000
-
-if freq > 266_000_000:
-    rp2.Flash().set_divisor(4)
-
-machine.freq(freq)
-
 # PIO program to drive the clock.  Put a value n and it clocks n+1 times
 # Reads 0 when done.
 @rp2.asm_pio(sideset_init=rp2.PIO.OUT_LOW, autopull=True, pull_thresh=32, autopush=True, push_thresh=32)
@@ -32,7 +24,7 @@ tt = DemoBoard(applyUserConfig=False)
 tt.shuttle.tt_um_test.enable()
 
 # Setup the PIO clock driver
-sm = rp2.StateMachine(0, clock_prog, freq=freq, sideset_base=machine.Pin(0))
+sm = rp2.StateMachine(0, clock_prog, sideset_base=machine.Pin(0))
 sm.active(1)
 
 def run_test(freq, fast=False):
@@ -78,12 +70,13 @@ def run_test(freq, fast=False):
     finally:
         if freq > 133_000_000:
             machine.freq(133_000_000)
-            rp2.Flash().set_divisor(2)
+            if freq > 266_000_000:
+                rp2.Flash().set_divisor(2)
         
     return errors
 
 if __name__ == "__main__":
-    freq = 100_000_000
+    freq = 66_000_000
     while True:
         print(f"\nRun at {freq/1000000}MHz project clock\n")
         errors = run_test(freq, True)
